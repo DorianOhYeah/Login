@@ -21,7 +21,8 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener{
+
+public class MainActivity extends AppCompatActivity implements View.OnClickListener, View.OnFocusChangeListener {
     private RadioGroup rg_login;
     private RadioButton rb_password;
     private RadioButton rb_verifycode;
@@ -36,6 +37,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private boolean bRemember = false; // if remember the password
     private String mPassword = "111111"; // default password
     private String mVerifyCode; // verifycode
+    private UserDBHelper mHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,6 +62,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btn_forget.setOnClickListener(this);
         findViewById(R.id.btn_login).setOnClickListener(this);
         initTypeSpinner();
+        // set a focus change listener for the edit password box
+        et_password.setOnFocusChangeListener(this);
     }
 
     // inital the spinner for the users
@@ -207,6 +211,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             super.onRestart();
         }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 获得用户数据库帮助器的一个实例
+        mHelper = UserDBHelper.getInstance(this, 2);
+        // 恢复页面，则打开数据库连接
+        mHelper.openWriteLink();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // 暂停页面，则关闭数据库连接
+        mHelper.closeLink();
+    }
+
         // pass and login successfully
         private void loginSuccess() {
             String desc = String.format("您的手机号码是%s，类型是%s。恭喜你通过登录验证，点击“确定”按钮返回上个页面",
@@ -224,6 +244,33 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             builder.setNegativeButton("wait a second", null);
             AlertDialog alert = builder.create();
             alert.show();
+            // 如果勾选了“记住密码”，则把手机号码和密码保存为数据库的用户表记录
+            if (bRemember) {
+                // 创建一个用户信息实体类
+                UserInfo info = new UserInfo();
+                info.phone = et_phone.getText().toString();
+                info.password = et_password.getText().toString();
+                info.update_time = DateUtil.getNowDateTime("yyyy-MM-dd HH:mm:ss");
+                // 往用户数据库添加登录成功的用户信息（包含手机号码、密码、登录时间）
+                mHelper.insert(info);
+            }
         }
+
+    @Override
+    public void onFocusChange(View v, boolean hasFocus) {
+        String phone = et_phone.getText().toString();
+        // 判断是否是密码编辑框发生焦点变化
+        if (v.getId() == R.id.et_password) {
+            // 用户已输入手机号码，且密码框获得焦点
+            if (phone.length() > 0 && hasFocus) {
+                // 根据手机号码到数据库中查询用户记录
+                UserInfo info = mHelper.queryByPhone(phone);
+                if (info != null) {
+                    // 找到用户记录，则自动在密码框中填写该用户的密码
+                    et_password.setText(info.password);
+                }
+            }
+        }
+    }
 
 }
